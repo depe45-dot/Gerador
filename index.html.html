@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Receitas Portátil</title>
+    <!-- Carrega Tailwind CSS para estilização e responsividade -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#4f46e5', // Índigo
+                        'primary-dark': '#4338ca', // Índigo escuro
+                        'surface': '#1f2937', // Cinza escuro para cards
+                        'background': '#111827', // Fundo bem escuro
+                        'warning': '#f59e0b', // Âmbar para avisos
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Estilos personalizados para estética e modo escuro */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: theme('colors.background');
+        }
+        .card {
+            background-color: theme('colors.surface');
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+        }
+        textarea {
+            resize: none; /* Previne redimensionamento vertical pelo usuário */
+        }
+        /* Estilo customizado para a barra de rolagem */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #374151;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.primary');
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: theme('colors.primary-dark');
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 flex items-center justify-center text-gray-100">
+
+    <div class="w-full max-w-2xl">
+        <!-- Card Principal da Aplicação -->
+        <div class="card p-6 md:p-8 rounded-xl space-y-6">
+            <h1 class="text-3xl font-bold text-center text-primary">Culinária Inteligente</h1>
+            <p class="text-center text-gray-400">
+                Liste os ingredientes que você tem e o Gemini encontrará receitas incríveis para você.
+            </p>
+
+            <!-- Campo de Input da API Key -->
+            <div class="space-y-2 p-3 bg-gray-800 rounded-lg border border-warning/50">
+                <label for="apiKeyInput" class="block text-xs font-medium text-warning">
+                    ⚠️ Chave de API do Gemini (Necessária para funcionar fora deste ambiente):
+                </label>
+                <input type="password" id="apiKeyInput" class="w-full p-2 rounded-lg bg-gray-700 border border-gray-600 focus:ring-warning focus:border-warning text-white placeholder-gray-400 text-sm" placeholder="Cole sua chave aqui...">
+            </div>
+
+            <!-- Área de Input de Ingredientes -->
+            <div class="space-y-4">
+                <label for="ingredients" class="block text-sm font-medium text-gray-300">
+                    Seus Ingredientes (separados por vírgula ou em linhas):
+                </label>
+                <textarea id="ingredients" rows="4" class="w-full p-3 rounded-lg bg-gray-700 border border-gray-600 focus:ring-primary focus:border-primary text-white placeholder-gray-400" placeholder="Ex: frango, brócolis, arroz, queijo, alho, ovo"></textarea>
+                
+                <button id="generateButton" class="w-full py-3 px-4 bg-primary hover:bg-primary-dark rounded-lg font-semibold text-white transition duration-200 shadow-lg shadow-primary/50 disabled:opacity-50 disabled:cursor-not-allowed" onclick="generateRecipes()">
+                    Gerar Receitas
+                </button>
+            </div>
+
+            <!-- Seção de Resultados -->
+            <div id="resultsContainer" class="hidden space-y-4 pt-4 border-t border-gray-700">
+                <h2 class="text-2xl font-semibold text-primary">Receitas Sugeridas</h2>
+                
+                <!-- Indicador de Carregamento -->
+                <div id="loadingIndicator" class="hidden flex items-center justify-center p-6 text-lg text-primary">
+                    <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Buscando ideias deliciosas...
+                </div>
+                
+                <!-- Saída das Receitas -->
+                <div id="recipeOutput" class="whitespace-pre-wrap p-4 rounded-lg bg-gray-700 border border-gray-600 text-gray-200">
+                    <!-- Receitas serão inseridas aqui pela função JavaScript -->
+                </div>
+
+                <!-- Fontes de Citação (para receitas baseadas em pesquisa) -->
+                <div id="sourcesContainer" class="hidden mt-4">
+                    <p class="text-sm font-medium text-gray-400 mb-2">Fontes Consultadas (para receitas baseadas em pesquisa):</p>
+                    <ul id="sourcesList" class="space-y-1 text-xs text-gray-500">
+                        <!-- Fontes serão inseridas aqui pela função JavaScript -->
+                    </ul>
+                </div>
+
+                <!-- Mensagem de Erro -->
+                <div id="errorMessage" class="hidden p-4 rounded-lg bg-red-800/30 border border-red-700 text-red-300">
+                    <p class="font-semibold">Ocorreu um erro:</p>
+                    <p id="errorText"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // Referências aos elementos DOM
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const ingredientsInput = document.getElementById('ingredients');
+        const generateButton = document.getElementById('generateButton');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const recipeOutput = document.getElementById('recipeOutput');
+        const sourcesContainer = document.getElementById('sourcesContainer');
+        const sourcesList = document.getElementById('sourcesList');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+
+        /**
+         * Exibe uma mensagem de erro na interface do usuário.
+         * @param {string} message - A mensagem de erro.
+         */
+        function displayError(message) {
+            console.error("Erro na aplicação:", message);
+            errorMessage.classList.remove('hidden');
+            errorText.textContent = message;
+            loadingIndicator.classList.add('hidden');
+            generateButton.disabled = false;
+        }
+
+        /**
+         * Função principal para gerar as receitas.
+         */
+        window.generateRecipes = async function() {
+            // Obtém a API Key do campo de input
+            const apiKey = apiKeyInput.value.trim();
+            if (!apiKey) {
+                displayError("Erro: Por favor, insira sua Chave de API do Gemini para continuar.");
+                return;
+            }
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+
+            const rawIngredients = ingredientsInput.value.trim();
+            if (!rawIngredients) {
+                displayError("Por favor, insira pelo menos um ingrediente para começar.");
+                return;
+            }
+
+            // Limpa e prepara a interface para novos resultados
+            errorMessage.classList.add('hidden');
+            resultsContainer.classList.remove('hidden');
+            loadingIndicator.classList.remove('hidden');
+            recipeOutput.textContent = '';
+            sourcesContainer.classList.add('hidden');
+            sourcesList.innerHTML = '';
+            generateButton.disabled = true;
+
+            // Processa a lista de ingredientes
+            const ingredientsList = rawIngredients.split(/[\n,]+/).map(item => item.trim()).filter(item => item.length > 0).join(', ');
+
+            // Instrução do sistema para guiar o modelo (persona e formato)
+            const systemPrompt = {
+                parts: [{ 
+                    text: "Você é um chef profissional e gerador de receitas. Com base na lista de ingredientes do usuário, forneça três ideias de receitas distintas, simples e deliciosas. Formate a resposta como um bloco de texto único e detalhado, sem usar formatação Markdown (como listas, negrito ou cabeçalhos) na saída de texto principal. Cada receita deve incluir: 1. Título da Receita, 2. Ingredientes Necessários (somente aqueles da lista do usuário mais quaisquer itens básicos comuns como sal, azeite, pimenta), 3. Instruções Simples. Use o português de Portugal ou Brasil de forma consistente."
+                }]
+            };
+
+            // Consulta do usuário
+            const userQuery = `Gerar três receitas de refeições usando os seguintes ingredientes: ${ingredientsList}.`;
+
+            // Payload da API
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                // Habilita o Google Search para busca de informações atualizadas (Grounding)
+                tools: [{ "google_search": {} }],
+                systemInstruction: systemPrompt,
+            };
+
+            const maxRetries = 5;
+            let currentRetry = 0;
+
+            // Função que realiza a chamada à API com lógica de repetição
+            const callApi = async () => {
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(`Erro de API: ${response.status} ${response.statusText}. Detalhes: ${JSON.stringify(errorData)}`);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (!candidate || !candidate.content?.parts?.[0]?.text) {
+                        throw new Error("A API não retornou conteúdo de receita válido.");
+                    }
+
+                    // 1. Extrair o texto gerado
+                    const text = candidate.content.parts[0].text;
+                    recipeOutput.textContent = text;
+
+                    // 2. Processar fontes de citação (Grounding sources)
+                    let sources = [];
+                    const groundingMetadata = candidate.groundingMetadata;
+                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                        sources = groundingMetadata.groundingAttributions
+                            .map(attribution => ({
+                                uri: attribution.web?.uri,
+                                title: attribution.web?.title,
+                            }))
+                            .filter(source => source.uri && source.title); 
+                    }
+
+                    // Exibir fontes, se houver
+                    if (sources.length > 0) {
+                        sourcesContainer.classList.remove('hidden');
+                        sources.forEach(source => {
+                            const li = document.createElement('li');
+                            li.innerHTML = `<a href="${source.uri}" target="_blank" class="text-primary hover:text-primary-dark underline">${source.title}</a>`;
+                            sourcesList.appendChild(li);
+                        });
+                    }
+
+                } catch (error) {
+                    console.error("Tentativa de API falhou:", error);
+                    currentRetry++;
+                    if (currentRetry < maxRetries) {
+                        // Implementa Backoff Exponencial com Jitter
+                        const delay = Math.pow(2, currentRetry) * 1000 + (Math.random() * 1000); 
+                        console.log(`Tentando novamente em ${Math.round(delay / 1000)}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        return callApi(); // Tenta novamente
+                    } else {
+                        throw new Error(`Falha ao gerar receitas após ${maxRetries} tentativas. ${error.message}`);
+                    }
+                }
+            };
+
+            try {
+                await callApi();
+            } catch (error) {
+                displayError(error.message);
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                generateButton.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
